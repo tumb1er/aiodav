@@ -3,12 +3,15 @@
 import aiohttp_jinja2
 from aiohttp import web
 
-from aiodav import resources
+from aiodav import resources, conf
 
 
 @aiohttp_jinja2.template('root.jinja2')
 async def root_view(request):
-    return {'request': request}
+    aiodav_conf = request.app[conf.APP_KEY]
+    mounts = aiodav_conf['mounts']
+    resources = sorted(mounts.keys())
+    return {'resources': resources}
 
 
 class ResourceView(web.View):

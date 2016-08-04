@@ -1,5 +1,11 @@
 <html>
 <body>
-Hi there!
+<h1>Hi there!</h1>
+
+<ul>
+{% for resource in resources %}
+    <li><a href="{{ resource }}/">{{ resource }}</a></li>
+{% endfor %}
+</ul>
 </body>
 </html>

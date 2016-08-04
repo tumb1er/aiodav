@@ -5,10 +5,9 @@ import aiohttp_jinja2
 import jinja2
 from aiohttp import web
 
-from aiodav import views, resources
-from aiodav.contrib.debugtoolbar import setup_aiodav_panels
+from aiodav import views, resources, conf
 
-APP_KEY = 'aiodav'
+from aiodav.contrib.debugtoolbar import setup_aiodav_panels
 
 
 def setup(app: web.Application, *, prefix:str ='/', hack_debugtoolbar: bool=True,
@@ -21,14 +20,14 @@ def setup(app: web.Application, *, prefix:str ='/', hack_debugtoolbar: bool=True
     if hack_debugtoolbar:
         setup_aiodav_panels(app)
 
-    app.router.add_route('*', '/', views.root_view)
+    app.router.add_route('GET', prefix, views.root_view)
 
     for prefix, resource in mounts.items():
         resource_view = views.ResourceView.with_resource(resource, prefix)
         path = '/%s/{relative:.*}' % prefix.strip('/')
         app.router.add_route('*', path, resource_view)
 
-    app[APP_KEY] = {
+    app[conf.APP_KEY] = {
         'mounts': mounts
     }
 
