@@ -1,4 +1,5 @@
 # coding: utf-8
+import asyncio
 from abc import ABC, abstractmethod, abstractproperty
 from collections import OrderedDict
 import typing
@@ -64,3 +65,7 @@ class AbstractResource(ABC):
 
     def __truediv__(self, other: str) -> 'AbstractResource':
         return self.with_relative(other)
+
+    @abstractmethod
+    async def write_content(self, write: typing.Callable[[bytes], typing.Any]):
+        raise NotImplementedError()

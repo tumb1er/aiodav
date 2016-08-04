@@ -66,10 +66,25 @@ class ResourceView(web.View):
     def depth(self):
         return int(self.request.headers.get('Depth', 0))
 
-    @aiohttp_jinja2.template('resource.jinja2')
     async def get(self):
+        accept = self.request.headers.get('Accept', '')
         resource = await self._instantiate_resource(self.relative)
-        return {'resource': resource, 'relative': self.relative}
+        if 'text/html' in accept and not self.request.GET.get('dl'):
+            context = {'resource': resource, 'relative': self.relative}
+            return aiohttp_jinja2.render_template(
+                'resource.jinja2', self.request, context)
+        if resource.is_collection:
+            raise web.HTTPBadRequest(text="Can't download collection")
+        return await self.stream_resource(resource)
+
+    async def stream_resource(self, resource):
+        response = web.StreamResponse()
+        await response.prepare(self.request)
+        # noinspection PyTypeChecker
+        await resource.write_content(response.write)
+        await response.write_eof()
+        response.set_tcp_nodelay(True)
+        return response
 
     async def options(self):
         response = web.Response(text="", content_type='text/xml')
@@ -91,7 +106,9 @@ class ResourceView(web.View):
             for res in resource.collection:
                 await res.populate_props()
                 propstat = self.propstat_xml(res)
-                resp = DavXMLResponse(os.path.join(self.request.path, res.path.lstrip('/')), propstat=propstat)
+                resp = DavXMLResponse(
+                    os.path.join(self.request.path,
+                                 res.path.lstrip('/')), propstat=propstat)
                 collection.append(resp)
         return MultiStatusResponse(response, *collection)
 

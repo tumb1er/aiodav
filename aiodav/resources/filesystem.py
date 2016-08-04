@@ -1,4 +1,5 @@
 # coding: utf-8
+import asyncio
 import os
 import typing
 from collections import OrderedDict
@@ -90,3 +91,12 @@ class FileSystemResource(AbstractResource):
             return all_props
 
         return OrderedDict(p for p in all_props.items() if p[0] in props)
+
+    async def write_content(self, write: typing.Callable[[bytes], typing.Any]):
+        with self.absolute.open('rb') as f:
+            while True:
+                buffer = f.read(1024**2)
+                write(buffer)
+                if len(buffer) < 1024**2:
+                    break
+
