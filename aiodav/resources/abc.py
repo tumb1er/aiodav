@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod, abstractproperty
 from collections import OrderedDict
 import typing
 
+import collections
+
 
 class AbstractResource(ABC):
     """ Abstract WebDAV Resource."""
@@ -45,7 +47,7 @@ class AbstractResource(ABC):
         raise NotImplementedError()
 
     @abstractproperty
-    def collection(self)-> typing.Iterable['AbstractResource']:
+    def collection(self)-> typing.List['AbstractResource']:
         raise NotImplementedError()
 
     @abstractmethod

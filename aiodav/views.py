@@ -31,6 +31,11 @@ class ResourceView(web.View):
     :type prefix: str
     :type kw: dict
     """
+
+    resource = None
+    prefix = None
+    kw = None
+
     @asyncio.coroutine
     def __iter__(self):
         if self.request.method not in DAV_METHODS:
@@ -41,23 +46,25 @@ class ResourceView(web.View):
         resp = yield from method()
         return resp
 
-
-    resource = None
-    prefix = None
-    kw = None
-
     @classmethod
     def with_resource(cls, resource: resources.AbstractResource,
                       prefix: str, **kwargs) -> 'ResourceView':
-        klass = type('ResourceView', (ResourceView,), {'prefix': prefix,
-                                                       'resource': resource,
-                                                       'kw': kwargs,
-                                                       '__module__': cls.__module__})
+        attrs = {
+            'prefix': prefix,
+            'resource': resource,
+            'kw': kwargs,
+            '__module__': cls.__module__
+        }
+        klass = type('ResourceView', (ResourceView,), attrs)
         return klass
 
     @property
     def relative(self):
         return self.request.match_info['relative'].lstrip('/')
+
+    @property
+    def depth(self):
+        return int(self.request.headers.get('Depth', 0))
 
     @aiohttp_jinja2.template('resource.jinja2')
     async def get(self):
@@ -71,16 +78,21 @@ class ResourceView(web.View):
         return response
 
     async def propfind(self):
+        body = await self.request.read()
+        props = self.parse_propfind(body) if body else []
         resource = await self._instantiate_resource(self.relative)
-        propstat = self.propstat_xml(resource)
+        # noinspection PyArgumentList
+        propstat = self.propstat_xml(resource, *props)
         response = DavXMLResponse(self.request.path, propstat=propstat)
+
         collection = []
-        # if resource.is_collection:
-        #     for res in resource.collection:
-        #         await res.populate_props()
-        #         propstat = self.propstat_xml(res)
-        #         resp = DavXMLResponse(os.path.join(self.request.path, res.path.lstrip('/')), propstat=propstat)
-        #         collection.append(resp)
+        if resource.is_collection and self.depth == 1:
+            # noinspection PyTypeChecker
+            for res in resource.collection:
+                await res.populate_props()
+                propstat = self.propstat_xml(res)
+                resp = DavXMLResponse(os.path.join(self.request.path, res.path.lstrip('/')), propstat=propstat)
+                collection.append(resp)
         return MultiStatusResponse(response, *collection)
 
     async def _instantiate_resource(self, relative):
@@ -90,10 +102,10 @@ class ResourceView(web.View):
             await resource.populate_collection()
         return resource
 
-    def propstat_xml(self, resource: resources.AbstractResource) -> ET.Element:
+    def propstat_xml(self, resource: resources.AbstractResource, *props) -> ET.Element:
         ps = ET.Element('{DAV:}propstat', nsmap={'D': 'DAV:'})
         prop = ET.SubElement(ps, '{DAV:}prop', nsmap={'D': 'DAV:'})
-        for k, v in resource.propfind().items():
+        for k, v in resource.propfind(*props).items():
             el = ET.SubElement(prop, '{DAV:}%s' % k, nsmap={'D': 'DAV:'})
             el.text = str(v)
 
@@ -102,6 +114,16 @@ class ResourceView(web.View):
             col = ET.SubElement(rt, '{DAV:}collection', nsmap={'D': 'DAV:'})
             col.text = ''
         return ps
+
+    @staticmethod
+    def parse_propfind(text) -> typing.List[str]:
+        xml = ET.fromstring(text)
+        props = []
+        prop_elems = xml.xpath('D:prop/*', namespaces={'D': 'DAV:'})
+        for elem in prop_elems:
+            props.append(elem.tag.replace('{DAV:}', ''))
+        return props
+
 
 
 class DavResourceRoute(ResourceRoute):
@@ -113,7 +135,7 @@ class DavXMLResponse:
         self.status = ET.Element('{DAV:}status', nsmap={'D': 'DAV:'})
         self.status.text = 'HTTP/1.1 %s %s' % (status, reason)
         self.propstat = propstat
-        if self.propstat:
+        if self.propstat is not None:
             self.propstat.append(self.status)
         self.href = href
 
@@ -129,7 +151,7 @@ class MultiStatusResponse(web.Response):
     def dump_xml(xml):
         f = BytesIO()
         f.write(b'<?xml version="1.0" encoding="utf-8" ?>\n')
-        ET.ElementTree(xml).write(f, pretty_print=False)
+        ET.ElementTree(xml).write(f, pretty_print=True)
         body = f.getvalue()
         return body
 

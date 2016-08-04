@@ -75,13 +75,18 @@ class FileSystemResource(AbstractResource):
         self._collection.extend(sorted(files, key=lambda r: r.name))
 
     def propfind(self, *props) -> OrderedDict:
-        ctime = datetime.fromtimestamp(self._stat.st_ctime).strftime('%Y-%m-%dT%H:%M:%SZ')
-        mtime = datetime.fromtimestamp(self._stat.st_mtime).strftime('%Y-%m-%dT%H:%M:%SZ')
-        return OrderedDict([
+        fmt = '%Y-%m-%dT%H:%M:%SZ'
+        ctime = datetime.fromtimestamp(self._stat.st_ctime).strftime(fmt)
+        mtime = datetime.fromtimestamp(self._stat.st_mtime).strftime(fmt)
+        all_props = OrderedDict([
             ('getcontenttype', ''),
             ('getlastmodified', mtime),
             ('getcontentlength', self._stat.st_size),
             ('getetag', ''),
             ('creationdate', ctime),
-            ('displayname', self.prefix),
+            ('displayname', self.name),
         ])
+        if not props:
+            return all_props
+
+        return OrderedDict(p for p in all_props.items() if p[0] in props)
