@@ -2,6 +2,9 @@
 import asyncio
 import os
 import typing
+from urllib.parse import urlparse
+
+from aiohttp.streams import EmptyStreamReader
 from lxml import etree as ET
 
 import aiohttp_jinja2
@@ -11,6 +14,7 @@ from aiohttp.web_urldispatcher import ResourceRoute
 from io import BytesIO
 
 from aiodav import resources, conf
+from aiodav.resources import errors
 
 DAV_METHODS = ["OPTIONS", "GET", "HEAD", "POST", "PUT", "DELETE", "TRACE",
                "COPY", "MOVE", "MKCOL", "PROPFIND"]
@@ -80,6 +84,47 @@ class ResourceView(web.View):
             start = end = 0
         return start, end
 
+    async def mkcol(self):
+        current, resource = await self._instantiate_parent()
+        if not resource.is_collection:
+            raise web.HTTPBadRequest(text="Collection expected")
+        await resource.make_collection(current)
+        return web.HTTPCreated()
+
+    async def _instantiate_parent(self):
+        parent, collection = os.path.split(self.relative.rstrip('/'))
+        resource = await self._instantiate_resource(parent)
+        return collection, resource
+
+    async def move(self):
+        destination = self.request.headers.get('Destination')
+        path = urlparse(destination).path.lstrip('/')
+        parts = path.split('/')
+        if parts[0] == self.prefix:
+            parts = parts[1:]
+        destination = '/'.join(parts)
+        resource = await self._instantiate_resource(self.relative)
+        created = await resource.move(destination)
+        if created:
+            return web.HTTPCreated()
+        else:
+            return web.HTTPNoContent()
+
+    async def head(self):
+        try:
+            await self._instantiate_resource(self.relative)
+            return web.HTTPOk()
+        except errors.ResourceDoesNotExist:
+            return web.HTTPNotFound()
+
+    async def delete(self):
+        try:
+            resource = await self._instantiate_resource(self.relative)
+            await resource.delete()
+            return web.HTTPOk()
+        except errors.ResourceDoesNotExist:
+            return web.HTTPNotFound()
+
     async def get(self):
         accept = self.request.headers.get('Accept', '')
         resource = await self._instantiate_resource(self.relative)
@@ -91,6 +136,25 @@ class ResourceView(web.View):
             raise web.HTTPBadRequest(text="Can't download collection")
         start, end = self.range
         return await self.stream_resource(resource, start=start, end=end)
+
+    async def put(self):
+        editable_resource = self.resource / self.relative
+        try:
+            await editable_resource.populate_props()
+            is_collection = editable_resource.is_collection
+        except errors.ResourceDoesNotExist:
+            is_collection = False
+        if is_collection:
+            raise web.HTTPMethodNotAllowed(
+                'PUT', ', '.join(DAV_METHODS), text="Can't PUT to collection")
+        if isinstance(self.request.content, EmptyStreamReader):
+            reader = None
+        else:
+            reader = self.request.content.readany
+        created = await editable_resource.put_content(reader)
+        if created:
+            return web.HTTPCreated()
+        return web.HTTPOk()
 
     async def stream_resource(self, resource, start=0, end=0):
         response = web.StreamResponse()
@@ -169,7 +233,6 @@ class ResourceView(web.View):
         for elem in prop_elems:
             props.append(elem.tag.replace('{DAV:}', ''))
         return props
-
 
 
 class DavResourceRoute(ResourceRoute):

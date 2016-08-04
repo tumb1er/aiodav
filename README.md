@@ -27,3 +27,8 @@ Production Status
 -----------------
 
 **Pre-alpha** version.
+
+Futher reading
+--------------
+* http://www.ietf.org/rfc/rfc4918.txt
+* https://habrahabr.ru/post/268123/

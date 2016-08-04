@@ -57,16 +57,35 @@ class AbstractResource(ABC):
 
     @abstractmethod
     async def populate_props(self):
+        """
+        :raises: aiodav.resources.errors.ResourceDoesNotExist
+        """
         raise NotImplementedError()
 
     @abstractmethod
     async def populate_collection(self):
         raise NotImplementedError()
 
+    @abstractmethod
+    async def write_content(self, write: typing.Callable[[bytes], typing.Any],
+                            *, offset: int=None, limit: int=None):
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def make_collection(self, collection: str) -> 'AbstractResource':
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def move(self, destination: str) -> bool:
+        raise NotImplementedError()
+
     def __truediv__(self, other: str) -> 'AbstractResource':
         return self.with_relative(other)
 
     @abstractmethod
-    async def write_content(self, write: typing.Callable[[bytes], typing.Any],
-                            *, offset: int=None, limit: int=None):
+    async def put_content(self, read_some: typing.Awaitable[bytes]) -> bool:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def delete(self):
         raise NotImplementedError()

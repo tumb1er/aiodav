@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import stat
 
-from aiodav.resources import AbstractResource
+from aiodav.resources import AbstractResource, errors
 
 
 class FileSystemResource(AbstractResource):
@@ -60,7 +60,10 @@ class FileSystemResource(AbstractResource):
         return new
 
     async def populate_props(self):
-        self._stat = os.stat(str(self.absolute))
+        try:
+            self._stat = os.stat(str(self.absolute))
+        except FileNotFoundError:
+            raise errors.ResourceDoesNotExist()
 
     async def populate_collection(self):
         self._collection = []
@@ -110,4 +113,33 @@ class FileSystemResource(AbstractResource):
                     limit -= len(buffer)
                 if len(buffer) < block_size:
                     break
+
+    async def make_collection(self, collection: str) -> 'AbstractResource':
+        new_path = self.absolute / collection
+        new_path.mkdir(exist_ok=True)
+
+        path = str(new_path.relative_to(self._root_dir))
+        return self.__class__(self.prefix, path, root_dir=self._root_dir)
+
+    async def move(self, destination: str) -> bool:
+        new_resource = self.__class__(self.prefix, destination,
+                                      root_dir=self._root_dir)
+        created = not new_resource.absolute.exists()
+        self.absolute.rename(new_resource.absolute)
+        self._path = new_resource.path
+        return created
+
+    async def put_content(self, read_some: typing.Awaitable[bytes]) -> bool:
+        created = not self.absolute.exists()
+        mode = 'wb' if created else 'r+b'
+        with self.absolute.open(mode) as f:
+            while read_some:
+                buffer = await read_some()
+                f.write(buffer)
+                if not buffer:
+                    return
+
+    async def delete(self):
+        self.absolute.unlink()
+
 
