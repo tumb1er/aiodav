@@ -2,6 +2,7 @@
 import os
 import typing
 from collections import OrderedDict
+from datetime import datetime
 from pathlib import Path
 import stat
 
@@ -40,7 +41,6 @@ class FileSystemResource(AbstractResource):
                                           root_dir=self._root_dir)
         return self._parent
 
-
     @property
     def absolute(self) -> Path:
         return self._root_dir.joinpath(self._path)
@@ -74,5 +74,14 @@ class FileSystemResource(AbstractResource):
         self._collection.extend(sorted(collections, key=lambda r: r.name))
         self._collection.extend(sorted(files, key=lambda r: r.name))
 
-    async def propfind(self, *props) -> OrderedDict:
-        return
+    def propfind(self, *props) -> OrderedDict:
+        ctime = datetime.fromtimestamp(self._stat.st_ctime).strftime('%Y-%m-%dT%H:%M:%SZ')
+        mtime = datetime.fromtimestamp(self._stat.st_mtime).strftime('%Y-%m-%dT%H:%M:%SZ')
+        return OrderedDict([
+            ('getcontenttype', ''),
+            ('getlastmodified', mtime),
+            ('getcontentlength', self._stat.st_size),
+            ('getetag', ''),
+            ('creationdate', ctime),
+            ('displayname', self.prefix),
+        ])

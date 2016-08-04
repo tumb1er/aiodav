@@ -24,8 +24,10 @@ def setup(app: web.Application, *, prefix:str ='/', hack_debugtoolbar: bool=True
 
     for prefix, resource in mounts.items():
         resource_view = views.ResourceView.with_resource(resource, prefix)
-        path = '/%s/{relative:.*}' % prefix.strip('/')
-        app.router.add_route('*', path, resource_view)
+        path = '/%s{relative:.*}' % prefix.strip('/')
+        dav_resource = app.router.add_resource(path)
+        route = views.DavResourceRoute('*', resource_view, dav_resource)
+        dav_resource.register_route(route)
 
     app[conf.APP_KEY] = {
         'mounts': mounts

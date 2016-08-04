@@ -8,7 +8,7 @@ class AbstractResource(ABC):
     """ Abstract WebDAV Resource."""
 
     @abstractmethod
-    async def propfind(self, *props) -> OrderedDict:
+    def propfind(self, *props) -> OrderedDict:
         raise NotImplementedError()
 
     def __init__(self, prefix: str, path: str='/'):

@@ -24,7 +24,6 @@ class RequestBodyPanel(DebugPanel):
 
 
 def setup_aiodav_panels(app):
-    from aiodav.contrib.debugtoolbar import RequestBodyPanel
     # Add RequestBody panel to debugtoolbar
     aiohttp_debugtoolbar.main.default_panel_names.append(RequestBodyPanel)
     env = (app.get(aiohttp_debugtoolbar.main.TEMPLATE_KEY) or
