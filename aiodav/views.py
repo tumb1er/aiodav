@@ -66,6 +66,20 @@ class ResourceView(web.View):
     def depth(self):
         return int(self.request.headers.get('Depth', 0))
 
+    @property
+    def range(self) -> typing.Tuple[int, int]:
+        range = self.request.headers.get('Range')
+        if range and range.startswith('bytes=') and '-' in range:
+            start, end = range[6:].split('-')
+            start = int(start)
+            if end:
+                end = int(end)
+            else:
+                end = 0
+        else:
+            start = end = 0
+        return start, end
+
     async def get(self):
         accept = self.request.headers.get('Accept', '')
         resource = await self._instantiate_resource(self.relative)
@@ -75,15 +89,30 @@ class ResourceView(web.View):
                 'resource.jinja2', self.request, context)
         if resource.is_collection:
             raise web.HTTPBadRequest(text="Can't download collection")
-        return await self.stream_resource(resource)
+        start, end = self.range
+        return await self.stream_resource(resource, start=start, end=end)
 
-    async def stream_resource(self, resource):
+    async def stream_resource(self, resource, start=0, end=0):
         response = web.StreamResponse()
+        if end:
+            length = min(resource.size, end + 1)
+        else:
+            length = resource.size
+        if start:
+            response.set_status(206)
+            length -= start
+            response.headers['Content-Range'] = 'bytes %s-%s/%s' % (
+                start, start + length-1, start + length)
+        response.content_length = length
         await response.prepare(self.request)
-        # noinspection PyTypeChecker
-        await resource.write_content(response.write)
-        await response.write_eof()
-        response.set_tcp_nodelay(True)
+        try:
+            # noinspection PyTypeChecker
+            await resource.write_content(response.write, offset=start,
+                                         limit=length)
+            await response.write_eof()
+            response.set_tcp_nodelay(True)
+        except asyncio.CancelledError:
+            pass
         return response
 
     async def options(self):

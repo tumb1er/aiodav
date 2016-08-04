@@ -92,11 +92,22 @@ class FileSystemResource(AbstractResource):
 
         return OrderedDict(p for p in all_props.items() if p[0] in props)
 
-    async def write_content(self, write: typing.Callable[[bytes], typing.Any]):
+    async def write_content(self, write: typing.Callable[[bytes], typing.Any],
+                            *, offset: int=None, limit: int=None):
         with self.absolute.open('rb') as f:
+            if offset:
+                f.seek(offset)
+            block_size = 1024**2
+            if not limit:
+                limit = None
             while True:
-                buffer = f.read(1024**2)
+                if limit is not None:
+                    buffer = f.read(min(block_size, limit))
+                else:
+                    buffer = f.read(block_size)
                 write(buffer)
-                if len(buffer) < 1024**2:
+                if limit is not None:
+                    limit -= len(buffer)
+                if len(buffer) < block_size:
                     break
 

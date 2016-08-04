@@ -67,5 +67,6 @@ class AbstractResource(ABC):
         return self.with_relative(other)
 
     @abstractmethod
-    async def write_content(self, write: typing.Callable[[bytes], typing.Any]):
+    async def write_content(self, write: typing.Callable[[bytes], typing.Any],
+                            *, offset: int=None, limit: int=None):
         raise NotImplementedError()
