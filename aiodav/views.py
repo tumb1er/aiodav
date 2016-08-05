@@ -2,7 +2,7 @@
 import asyncio
 import os
 import typing
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 from aiohttp.streams import EmptyStreamReader
 from lxml import etree as ET
@@ -71,6 +71,15 @@ class ResourceView(web.View):
         return int(self.request.headers.get('Depth', 0))
 
     @property
+    def destination(self):
+        destination = self.request.headers.get('Destination')
+        path = unquote(urlparse(destination).path.lstrip('/'))
+        parts = path.split('/')
+        if parts[0] == self.prefix:
+            parts = parts[1:]
+        return '/'.join(parts)
+
+    @property
     def range(self) -> typing.Tuple[int, int]:
         range = self.request.headers.get('Range')
         if range and range.startswith('bytes=') and '-' in range:
@@ -97,18 +106,17 @@ class ResourceView(web.View):
         return collection, resource
 
     async def move(self):
-        destination = self.request.headers.get('Destination')
-        path = urlparse(destination).path.lstrip('/')
-        parts = path.split('/')
-        if parts[0] == self.prefix:
-            parts = parts[1:]
-        destination = '/'.join(parts)
         resource = await self._instantiate_resource(self.relative)
-        created = await resource.move(destination)
+        created = await resource.move(self.destination)
         if created:
             return web.HTTPCreated()
         else:
             return web.HTTPNoContent()
+
+    async def copy(self):
+        resource = await self._instantiate_resource(self.relative)
+        await resource.copy(self.destination)
+        return web.HTTPCreated()
 
     async def head(self):
         try:
@@ -188,7 +196,20 @@ class ResourceView(web.View):
     async def propfind(self):
         body = await self.request.read()
         props = self.parse_propfind(body) if body else []
-        resource = await self._instantiate_resource(self.relative)
+        try:
+            resource = await self._instantiate_resource(self.relative)
+        except errors.ResourceDoesNotExist:
+            if 'gvfs' in self.request.headers.get('User-Agent', ''):
+                raise web.HTTPNotFound()
+            http_resp = web.HTTPNotFound()
+            empty_propstat = ET.Element('{DAV:}propstat', nsmap={'D': 'DAV:'})
+            prop = ET.SubElement(empty_propstat, '{DAV:}prop', nsmap={'D': 'DAV:'})
+            prop.text = ''
+            resp = DavXMLResponse(self.request.path,
+                                  status=http_resp.status_code,
+                                  reason=http_resp.reason,
+                                  propstat=empty_propstat)
+            return MultiStatusResponse(resp)
         # noinspection PyArgumentList
         propstat = self.propstat_xml(resource, *props)
         response = DavXMLResponse(self.request.path, propstat=propstat)

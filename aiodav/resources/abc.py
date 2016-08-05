@@ -87,5 +87,9 @@ class AbstractResource(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def delete(self):
+    async def delete(self):
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def copy(self, destination: str) -> 'AbstractResource':
         raise NotImplementedError()

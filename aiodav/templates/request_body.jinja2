@@ -1,5 +1,12 @@
-{% if text %}
-<pre>{{  text | e }}</pre>
+<h1>Request body:</h1>
+{% if request_body %}
+    <pre>{{  request_body | e }}</pre>
 {% else %}
-<p>No request body</p>
+    <p>No request body</p>
+{% endif %}
+<h1>Response body:</h1>
+{% if response_body %}
+    <pre>{{  response_body | e }}</pre>
+{% else %}
+    <p>No response body</p>
 {% endif %}

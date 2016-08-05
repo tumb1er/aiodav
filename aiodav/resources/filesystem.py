@@ -1,6 +1,7 @@
 # coding: utf-8
 import asyncio
 import os
+import shutil
 import typing
 from collections import OrderedDict
 from datetime import datetime
@@ -141,5 +142,18 @@ class FileSystemResource(AbstractResource):
 
     async def delete(self):
         self.absolute.unlink()
+
+    async def copy(self, destination: str) -> 'AbstractResource':
+        new_resource = self.__class__(self.prefix, destination,
+                                      root_dir=self._root_dir)
+
+        if not self.is_collection:
+            shutil.copy(str(self.absolute), str(new_resource.absolute))
+            await new_resource.populate_props()
+        else:
+            shutil.copytree(str(self.absolute), str(new_resource.absolute))
+            await new_resource.populate_props()
+            await new_resource.populate_collection()
+        return new_resource
 
 
