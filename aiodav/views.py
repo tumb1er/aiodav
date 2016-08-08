@@ -16,8 +16,7 @@ from io import BytesIO
 from aiodav import resources, conf
 from aiodav.resources import errors
 
-DAV_METHODS = ["OPTIONS", "GET", "HEAD", "POST", "PUT", "DELETE", "TRACE",
-               "COPY", "MOVE", "MKCOL", "PROPFIND"]
+DAV_METHODS = ["COPY", "MOVE", "MKCOL", "PROPFIND"]
 
 
 @aiohttp_jinja2.template('root.jinja2')
