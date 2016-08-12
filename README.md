@@ -3,6 +3,10 @@ AioDAV
 
 `AioDAV` is a WebDAV proxy and server.
 
+[![Build Status](https://travis-ci.org/tumb1er/aiodav.svg?branch=travis)](https://travis-ci.org/tumb1er/aiodav)
+[![codecov](https://codecov.io/gh/tumb1er/aiodav/branch/master/graph/badge.svg)](https://codecov.io/gh/tumb1er/aiodav)
+
+
 Main features
 -------------
 
