@@ -24,7 +24,7 @@ async def root_view(request):
     aiodav_conf = request.app[conf.APP_KEY]
     mounts = aiodav_conf['mounts']
     resources = sorted(mounts.keys())
-    return {'resources': resources}
+    return {'_resources': resources}
 
 
 class ResourceView(web.View):

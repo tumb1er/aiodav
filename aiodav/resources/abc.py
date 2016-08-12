@@ -54,7 +54,7 @@ class AbstractResource(ABC):
     @abstractmethod
     async def populate_props(self):
         """
-        :raises: aiodav.resources.errors.ResourceDoesNotExist
+        :raises: aiodav._resources.errors.ResourceDoesNotExist
         """
         raise NotImplementedError()  # pragma: no cover 
 
