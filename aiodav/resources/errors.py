@@ -7,3 +7,11 @@ class ResourceError(Exception):
 
 class ResourceDoesNotExist(ResourceError):
     """ Resource does not exist."""
+
+
+class ResourceAlreadyExists(ResourceError):
+    """ Resource already exists."""
+
+
+class InvalidResourceType(ResourceError):
+    """ Incorrect resource type."""
