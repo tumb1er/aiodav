@@ -19,7 +19,7 @@ from aiodav.resources import errors
 DAV_METHODS = ["COPY", "MOVE", "MKCOL", "PROPFIND"]
 
 
-@aiohttp_jinja2.template('root.jinja2')
+@aiohttp_jinja2.template('_root.jinja2')
 async def root_view(request):
     aiodav_conf = request.app[conf.APP_KEY]
     mounts = aiodav_conf['mounts']

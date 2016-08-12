@@ -16,7 +16,7 @@ class AbstractResource(ABC):
 
     def __init__(self, prefix: str, path: str='/'):
         """
-        :param prefix: WebDAV root prefix in aiodav mounts
+        :param prefix: WebDAV _root prefix in aiodav mounts
         :param path: relative path for concrete WebDAV resource
         :param kw: other init kwargs
         """
