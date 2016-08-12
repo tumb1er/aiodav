@@ -178,8 +178,8 @@ class ResourceView(web.View):
         await response.prepare(self.request)
         try:
             # noinspection PyTypeChecker
-            await resource.write_content(response.write, offset=start,
-                                         limit=length)
+            await resource.get_content(response.write, offset=start,
+                                       limit=length)
             await response.write_eof()
             response.set_tcp_nodelay(True)
         except asyncio.CancelledError:

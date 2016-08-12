@@ -96,8 +96,8 @@ class FileSystemResource(AbstractResource):
 
         return OrderedDict(p for p in all_props.items() if p[0] in props)
 
-    async def write_content(self, write: typing.Callable[[bytes], typing.Any],
-                            *, offset: int=None, limit: int=None):
+    async def get_content(self, write: typing.Callable[[bytes], typing.Any],
+                          *, offset: int=None, limit: int=None):
         with self.absolute.open('rb') as f:
             if offset:
                 f.seek(offset)
