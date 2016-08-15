@@ -197,6 +197,13 @@ class BackendTestsMixin(object):
             ('getlastmodified', format_time(file_resource.mtime))
         ]))
 
+    async def testReadLarge(self):
+        file_resource = self.root / 'filename.txt'
+        expected = b'A' * 2 * 1024**2
+        await self.fill_file(file_resource, content=expected)
+        content = await self.read_file(file_resource)
+        self.assertEqual(content, expected)
+
     async def testReadOffset(self):
         file_resource = self.root / 'filename.txt'
         expected = b''.join([
@@ -301,6 +308,7 @@ class BackendTestsMixin(object):
     async def testCopyFile(self):
         file_resource = self.root / 'filename.txt'
         await self.fill_file(file_resource)
+        await file_resource.populate_props()
         new_file = await file_resource.copy('/copy.txt')
         self.assertEqual(new_file.path, '/copy.txt')
         await self.populate(new_file.parent, self.root, new_file, file_resource)

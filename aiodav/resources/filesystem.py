@@ -164,7 +164,7 @@ class FileSystemResource(AbstractResource):
             raise errors.ResourceDoesNotExist("parent resource does not exist")
         try:
             with self.absolute.open(mode) as f:
-                while read_some:
+                while True:
                     buffer = await read_some()
                     f.write(buffer)
                     if not buffer:
