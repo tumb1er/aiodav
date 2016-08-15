@@ -27,13 +27,15 @@ class DummyResource(AbstractResource):
                 self._content = BytesIO()
             else:
                 self._resources = {}
-        self._parent = parent
+        dirname = os.path.dirname(path)
+        self._parent = parent or self._root.with_relative(dirname)
 
         self._ctime = ctime or datetime.now()
         self._mtime = mtime or datetime.now()
 
     def _touch_file(self):
-        if not self.parent:
+        # noinspection PyProtectedMember
+        if not self.parent or not self.parent._exists:
             raise errors.ResourceDoesNotExist("Parent resource does not exist")
         if not self.parent.is_collection:
             raise errors.InvalidResourceType("Collection expected")
@@ -78,6 +80,14 @@ class DummyResource(AbstractResource):
             return 0
         return len(self._content.getvalue())
 
+    @property
+    def mtime(self):
+        return self._mtime
+
+    @property
+    def ctime(self):
+        return self._ctime
+
     async def put_content(self, read_some: typing.Awaitable[bytes]) -> bool:
         if self._exists:
             if self.is_collection:
@@ -87,7 +97,7 @@ class DummyResource(AbstractResource):
 
         self._content.seek(0)
         self._content.truncate()
-        while read_some:
+        while True:
             buffer = await read_some()
             self._content.write(buffer)
             if not buffer:

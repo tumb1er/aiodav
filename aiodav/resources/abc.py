@@ -1,4 +1,5 @@
 # coding: utf-8
+import os
 import typing
 from abc import ABC, abstractmethod, abstractproperty
 from collections import OrderedDict
@@ -21,7 +22,7 @@ class AbstractResource(ABC):
 
     @property
     def path(self):
-        return self._path
+        return os.path.join('/', self._path)
 
     @abstractproperty
     def name(self) -> str:
@@ -29,7 +30,15 @@ class AbstractResource(ABC):
 
     @abstractproperty
     def size(self) -> int:
-        raise NotImplementedError()  # pragma: no cover 
+        raise NotImplementedError()  # pragma: no cover
+
+    @abstractproperty
+    def mtime(self) -> int:
+        raise NotImplementedError()  # pragma: no cover
+
+    @abstractproperty
+    def ctime(self) -> int:
+        raise NotImplementedError()  # pragma: no cover
 
     @abstractproperty
     def parent(self) -> 'AbstractResource':
@@ -88,4 +97,13 @@ class AbstractResource(ABC):
 
     @abstractmethod
     async def copy(self, destination: str) -> 'AbstractResource':
-        raise NotImplementedError()  # pragma: no cover 
+        raise NotImplementedError()  # pragma: no cover
+
+    def __eq__(self, other):
+        if not isinstance(other, AbstractResource):
+            return NotImplemented
+        if self.path != other.path:
+            return False
+        if self.is_collection != other.is_collection:
+            return False
+        return True
