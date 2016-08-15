@@ -131,6 +131,8 @@ class DummyResource(AbstractResource):
 
     @property
     def parent(self) -> 'AbstractResource':
+        if self._path == '/':
+            return None
         return self._parent
 
     @property

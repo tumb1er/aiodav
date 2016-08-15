@@ -37,6 +37,39 @@ class BackendTestsMixin(object):
                 for r in res.collection:
                     await r.populate_props()
 
+    async def testEqMethod(self):
+        d1 = await self.root.make_collection('dir1')
+        d2 = await self.root.make_collection('dir2')
+        f1 = self.root / 'f1.txt'
+        f2 = self.root / 'f2.txt'
+        await self.fill_file(f1)
+        await self.fill_file(f2)
+
+        self.assertFalse(d1 == d2)
+        self.assertFalse(f1 == f2)
+
+        f3 = self.root / 'f1.txt'
+        await self.populate(f1, f3)
+        self.assertTrue(f3 == f1)
+
+        d3 = self.root / 'dir1'
+        await self.populate(d1, d3)
+        self.assertTrue(d3 == d1)
+
+        await d1.delete()
+
+        d4 = self.root / 'dir1'
+        await self.fill_file(d4)
+
+        await self.populate(d4)
+        self.assertFalse(d4 == d1)
+
+        self.assertFalse(d1 == 3)
+        self.assertFalse(f1 == 3)
+
+    def testRootParent(self):
+        self.assertIsNone(self.root.parent)
+
     async def testEmptyList(self):
         await self.root.populate_collection()
         result = self.root.collection
@@ -78,13 +111,13 @@ class BackendTestsMixin(object):
         self.assertIs(first, second)
 
     @staticmethod
-    async def read_file(resource):
+    async def read_file(resource, offset=0, limit=None):
         content = BytesIO()
 
         async def write(data):
             content.write(data)
 
-        await resource.get_content(write)
+        await resource.get_content(write, offset=offset, limit=limit)
         content.seek(0)
         content = content.getvalue()
         return content
@@ -164,6 +197,28 @@ class BackendTestsMixin(object):
             ('getlastmodified', format_time(file_resource.mtime))
         ]))
 
+    async def testReadOffset(self):
+        file_resource = self.root / 'filename.txt'
+        expected = b''.join([
+            b'A' * 100,
+            b'CONTENT',
+            b'B' * 100
+        ])
+        await self.fill_file(file_resource, content=expected)
+        content = await self.read_file(file_resource, offset=100)
+        self.assertEqual(content, expected[100:])
+
+    async def testReadOffsetLimit(self):
+        file_resource = self.root / 'filename.txt'
+        expected = b''.join([
+            b'A' * 100,
+            b'CONTENT',
+            b'B' * 100
+        ])
+        await self.fill_file(file_resource, content=expected)
+        content = await self.read_file(file_resource, offset=100, limit=7)
+        self.assertEqual(content, expected[100:107])
+
     async def testPutContentOnCollection(self):
         resource = await self.root.make_collection('dir')
 
@@ -214,6 +269,13 @@ class BackendTestsMixin(object):
     async def testDeleteResource(self):
         res = await self.root.make_collection('dir')
         await res.delete()
+        await self.populate(self.root)
+        self.assertListEqual(self.root.collection, [])
+
+    async def testDeleteFile(self):
+        file_resource = self.root / 'filename.txt'
+        await self.fill_file(file_resource)
+        await file_resource.delete()
         await self.populate(self.root)
         self.assertListEqual(self.root.collection, [])
 

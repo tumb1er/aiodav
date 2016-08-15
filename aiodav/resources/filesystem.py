@@ -1,12 +1,11 @@
 # coding: utf-8
-import asyncio
 import os
 import shutil
+import stat
 import typing
 from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
-import stat
 
 from aiodav.resources import AbstractResource, errors
 
@@ -35,11 +34,11 @@ class FileSystemResource(AbstractResource):
 
     @property
     def mtime(self):
-        return  datetime.fromtimestamp(self._stat.st_mtime)
+        return datetime.fromtimestamp(self._stat.st_mtime)
 
     @property
     def ctime(self):
-        return  datetime.fromtimestamp(self._stat.st_ctime)
+        return datetime.fromtimestamp(self._stat.st_ctime)
 
     @property
     def parent(self) -> 'FileSystemResource':
@@ -211,5 +210,4 @@ class FileSystemResource(AbstractResource):
         return new_resource
 
     def __repr__(self):
-        return 'FileSytemResource<%s>' % self.path
-
+        return 'FileSystemResource<%s>' % self.path  # pragma: no cover
