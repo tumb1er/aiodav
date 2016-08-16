@@ -229,6 +229,19 @@ class WebDAVTestCase(BaseTestCase):
         await f.populate_props()
         self.assertListEqual(d.collection, [f])
 
+    async def testMoveToRoot(self):
+        f = self.root / 'f.txt'
+        await fill_file(f)
+
+        headers = {'Destination': '/prefix/f2.txt'}
+        response = await self.client.request('MOVE', '/prefix/f.txt',
+                                             headers=headers)
+        self.assertEqual(response.status, 201)
+        f = self.root / 'f2.txt'
+        await self.root.populate_collection()
+        await f.populate_props()
+        self.assertListEqual(self.root.collection, [f])
+
     async def testMoveOverwrite(self):
         f1 = self.root / 'f1.txt'
         await fill_file(f1)

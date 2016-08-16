@@ -227,14 +227,13 @@ class ResourceView(web.View):
             prop = et.SubElement(empty_propstat, '{DAV:}prop',
                                  nsmap={'D': 'DAV:'})
             prop.text = ''
-            resp = DavXMLResponse(self.request.path,
+            resp = DavXMLResponse(self.request.path, empty_propstat,
                                   status=http_resp.status_code,
-                                  reason=http_resp.reason,
-                                  propstat=empty_propstat)
+                                  reason=http_resp.reason)
             return MultiStatusResponse(resp)
         # noinspection PyArgumentList
         propstat = self.propstat_xml(resource, *props)
-        response = DavXMLResponse(self.request.path, propstat=propstat)
+        response = DavXMLResponse(self.request.path, propstat)
 
         collection = []
         if resource.is_collection and self.depth == 1:
@@ -242,9 +241,8 @@ class ResourceView(web.View):
             for res in resource.collection:
                 await res.populate_props()
                 propstat = self.propstat_xml(res)
-                resp = DavXMLResponse(
-                    os.path.join(self.request.path,
-                                 res.path.lstrip('/')), propstat=propstat)
+                href = os.path.join(self.request.path, res.path.lstrip('/'))
+                resp = DavXMLResponse(href, propstat)
                 collection.append(resp)
         return MultiStatusResponse(response, *collection)
 
@@ -287,12 +285,11 @@ class DavResourceRoute(ResourceRoute):
 
 
 class DavXMLResponse:
-    def __init__(self, href, *, status=200, reason="OK", propstat=None):
-        self.status = et.Element('{DAV:}status', nsmap={'D': 'DAV:'})
-        self.status.text = 'HTTP/1.1 %s %s' % (status, reason)
+    def __init__(self, href, propstat, *, status=200, reason="OK"):
+        s = et.Element('{DAV:}status', nsmap={'D': 'DAV:'})
+        s.text = 'HTTP/1.1 %s %s' % (status, reason)
+        propstat.append(s)
         self.propstat = propstat
-        if self.propstat is not None:
-            self.propstat.append(self.status)
         self.href = href
 
 
