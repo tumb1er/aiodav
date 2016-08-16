@@ -10,7 +10,9 @@ setup(
     author_email='zimbler@gmail.com',
     description='asyncio WebDAV proxy and server',
     install_requires=[
-        'aiohttp', 'aiohttp_jinja2'
+        'aiohttp',
+        'aiohttp_jinja2',
+        'lxml'
     ]
 )
 
