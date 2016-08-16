@@ -6,7 +6,7 @@ from io import BytesIO
 from aiohttp_tests import async_test
 
 from aiodav.resources import errors
-from tests.helpers import format_time
+from tests.helpers import format_time, fill_file, read_file
 
 
 # noinspection PyPep8Naming,PyAttributeOutsideInit
@@ -42,8 +42,8 @@ class BackendTestsMixin(object):
         d2 = await self.root.make_collection('dir2')
         f1 = self.root / 'f1.txt'
         f2 = self.root / 'f2.txt'
-        await self.fill_file(f1)
-        await self.fill_file(f2)
+        await fill_file(f1)
+        await fill_file(f2)
 
         self.assertFalse(d1 == d2)
         self.assertFalse(f1 == f2)
@@ -59,7 +59,7 @@ class BackendTestsMixin(object):
         await d1.delete()
 
         d4 = self.root / 'dir1'
-        await self.fill_file(d4)
+        await fill_file(d4)
 
         await self.populate(d4)
         self.assertFalse(d4 == d1)
@@ -94,7 +94,7 @@ class BackendTestsMixin(object):
         with self.assertRaises(errors.ResourceDoesNotExist):
             await file_resource.populate_props()
 
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
         await self.populate(self.root, file_resource, file_resource.parent)
         self.assertListEqual(self.root.collection, [file_resource])
         self.assertResourcesEqual(file_resource.parent, self.root)
@@ -103,50 +103,23 @@ class BackendTestsMixin(object):
         self.assertResourcesEqual(file_resource, resources[file_resource.name])
         self.assertFalse(file_resource.is_collection)
 
-        content = await self.read_file(file_resource)
+        content = await read_file(file_resource)
 
         self.assertEqual(content, b'CONTENT')
 
     def assertResourcesEqual(self, first, second):
         self.assertIs(first, second)
 
-    @staticmethod
-    async def read_file(resource, offset=0, limit=None):
-        content = BytesIO()
-
-        async def write(data):
-            content.write(data)
-
-        await resource.get_content(write, offset=offset, limit=limit)
-        content.seek(0)
-        content = content.getvalue()
-        return content
-
     async def testAddFileWriteAlreadyExists(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
 
         new_resource = self.root / 'filename.txt'
 
-        await self.fill_file(new_resource, content=b'NEW_CONTENT')
+        await fill_file(new_resource, content=b'NEW_CONTENT')
 
-        content = await self.read_file(file_resource)
+        content = await read_file(file_resource)
         self.assertEqual(content, b'NEW_CONTENT')
-
-    @staticmethod
-    async def fill_file(file_resource, content=None):
-        content = content or b'CONTENT'
-
-        def chunks():
-            yield content
-            yield b''
-
-        c = iter(chunks())
-
-        async def read_any():
-            return next(c)
-
-        await file_resource.put_content(read_any)
 
     async def testRootRelativeToRoot(self):
         root = self.root.with_relative('/')
@@ -166,15 +139,15 @@ class BackendTestsMixin(object):
 
     async def testMakeFileInFile(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
 
         with self.assertRaises(errors.InvalidResourceType):
             res = file_resource / 'new_file.txt'
-            await self.fill_file(res)
+            await fill_file(res)
 
     async def testPropfind(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
         await file_resource.populate_props()
         props = file_resource.propfind()
         self.assertDictEqual(props, OrderedDict([
@@ -188,7 +161,7 @@ class BackendTestsMixin(object):
 
     async def testPropfindList(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
         await file_resource.populate_props()
         props = file_resource.propfind('getcontenttype', 'getlastmodified')
 
@@ -200,8 +173,8 @@ class BackendTestsMixin(object):
     async def testReadLarge(self):
         file_resource = self.root / 'filename.txt'
         expected = b'A' * 2 * 1024**2
-        await self.fill_file(file_resource, content=expected)
-        content = await self.read_file(file_resource)
+        await fill_file(file_resource, content=expected)
+        content = await read_file(file_resource)
         self.assertEqual(content, expected)
 
     async def testReadOffset(self):
@@ -211,8 +184,8 @@ class BackendTestsMixin(object):
             b'CONTENT',
             b'B' * 100
         ])
-        await self.fill_file(file_resource, content=expected)
-        content = await self.read_file(file_resource, offset=100)
+        await fill_file(file_resource, content=expected)
+        content = await read_file(file_resource, offset=100)
         self.assertEqual(content, expected[100:])
 
     async def testReadOffsetLimit(self):
@@ -222,15 +195,22 @@ class BackendTestsMixin(object):
             b'CONTENT',
             b'B' * 100
         ])
-        await self.fill_file(file_resource, content=expected)
-        content = await self.read_file(file_resource, offset=100, limit=7)
+        await fill_file(file_resource, content=expected)
+        content = await read_file(file_resource, offset=100, limit=7)
         self.assertEqual(content, expected[100:107])
+
+    async def testPutNone(self):
+        file_resource = self.root / 'filename.txt'
+        res = await file_resource.put_content(None)
+        self.assertTrue(res)
+        content = await read_file(file_resource)
+        self.assertEqual(content, b'')
 
     async def testPutContentOnCollection(self):
         resource = await self.root.make_collection('dir')
 
         with self.assertRaises(errors.InvalidResourceType):
-            await self.fill_file(resource)
+            await fill_file(resource)
 
     async def testMakeCollectionTwice(self):
         await self.root.make_collection('dir')
@@ -240,32 +220,39 @@ class BackendTestsMixin(object):
 
     async def testMakeCollectionInFile(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
 
         with self.assertRaises(errors.InvalidResourceType):
             await self.root.make_collection('filename.txt/dir')
 
     async def testWriteFileInFile(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        res = await fill_file(file_resource)
+        self.assertTrue(res)
 
         new = self.create_resource(prefix=self.root.prefix,
                                    path='/filename.txt/new.txt')
 
         with self.assertRaises(errors.InvalidResourceType):
-            await self.fill_file(new)
+            await fill_file(new)
+
+    async def testWriteFileCreate(self):
+        file_resource = self.root / 'filename.txt'
+        await fill_file(file_resource)
+        res = await fill_file(file_resource)
+        self.assertFalse(res)
 
     async def testWriteOnUnexistentPath(self):
         new = self.create_resource(prefix=self.root.prefix,
                                    path='/filename.txt/new.txt')
 
         with self.assertRaises(errors.ResourceDoesNotExist):
-            await self.fill_file(new)
+            await fill_file(new)
 
     async def testReadCollectionContent(self):
         resource = await self.root.make_collection('dir')
         with self.assertRaises(errors.InvalidResourceType):
-            await self.read_file(resource)
+            await read_file(resource)
 
     async def testDeleteUnexistent(self):
         with self.assertRaises(errors.ResourceDoesNotExist):
@@ -281,7 +268,7 @@ class BackendTestsMixin(object):
 
     async def testDeleteFile(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
         await file_resource.delete()
         await self.populate(self.root)
         self.assertListEqual(self.root.collection, [])
@@ -307,32 +294,32 @@ class BackendTestsMixin(object):
 
     async def testCopyFile(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
         await file_resource.populate_props()
         new_file = await file_resource.copy('/copy.txt')
         self.assertEqual(new_file.path, '/copy.txt')
         await self.populate(new_file.parent, self.root, new_file, file_resource)
         self.assertResourcesEqual(new_file.parent, self.root)
-        content = await self.read_file(new_file)
+        content = await read_file(new_file)
         self.assertEqual(content, b'CONTENT')
         self.assertListEqual(self.root.collection, [new_file, file_resource])
 
     async def testCopyFileAlreadyExists(self):
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
         with self.assertRaises(errors.ResourceAlreadyExists):
             await file_resource.copy('/filename.txt')
 
     async def testCopyFileToCollection(self):
         directory = await self.root.make_collection('dir')
         file_resource = self.root / 'filename.txt'
-        await self.fill_file(file_resource)
+        await fill_file(file_resource)
         new_file = await file_resource.copy('/dir/copy.txt')
         self.assertEqual(new_file.path, '/dir/copy.txt')
         await self.populate(new_file, new_file.parent, directory, self.root,
                             file_resource)
         self.assertResourcesEqual(new_file.parent, directory)
-        content = await self.read_file(new_file)
+        content = await read_file(new_file)
         self.assertEqual(content, b'CONTENT')
         self.assertListEqual(self.root.collection, [directory, file_resource])
         self.assertListEqual(directory.collection, [new_file])
@@ -340,7 +327,7 @@ class BackendTestsMixin(object):
     async def testCopyDir(self):
         directory = await self.root.make_collection('dir')
         f1 = directory / 'filename.txt'
-        await self.fill_file(f1)
+        await fill_file(f1)
         d1 = await directory.make_collection('dir2')
 
         new_dir = await directory.copy('/dircopy')
@@ -361,13 +348,13 @@ class BackendTestsMixin(object):
     async def testCopyDirToFile(self):
         directory = await self.root.make_collection('dir')
         f1 = directory / 'filename.txt'
-        await self.fill_file(f1)
+        await fill_file(f1)
         with self.assertRaises(errors.InvalidResourceType):
             await directory.copy(f1.path)
 
     async def testCopyFileToUnexistentDest(self):
         f1 = self.root / 'filename.txt'
-        await self.fill_file(f1)
+        await fill_file(f1)
         with self.assertRaises(errors.ResourceDoesNotExist):
             await f1.copy('/dir/f2.txt')
 

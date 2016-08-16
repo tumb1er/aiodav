@@ -3,7 +3,7 @@
 {% with parent = resource.parent %}
     {% if parent %}
         <h1>{{ resource.path }}</h1>
-        <a href="/{{ parent.prefix }}/{{ parent.path }}">..</a>
+        <a href="/{{ parent.prefix }}{{ parent.path }}">..</a>
     {% else %}
         <h1>{{ resource.prefix }} root</h1>
     {% endif %}
@@ -12,13 +12,13 @@
 {%  if resource.is_collection %}
     <ul>
     {% for child in resource.collection %}
-        <li><a href="/{{ resource.prefix }}/{{ child.path }}">{{ child.name }}</a></li>
+        <li><a href="/{{ resource.prefix }}{{ child.path }}">{{ child.name }}</a></li>
     {% endfor %}
     </ul>
 {% else %}
     <ul>
         <li>size: <b>{{ resource.size | filesizeformat }}</b></li>
-        <li>download: <a href="/{{ resource.prefix }}/{{ resource.path }}?dl=1">{{ resource.name }}</a></li>
+        <li>download: <a href="/{{ resource.prefix }}{{ resource.path }}?dl=1">{{ resource.name }}</a></li>
     </ul>
 {%  endif %}
 </body>

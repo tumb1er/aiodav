@@ -5,6 +5,8 @@ from collections import OrderedDict
 from datetime import datetime
 from io import BytesIO
 
+import asyncio
+
 from aiodav.resources import AbstractResource, errors
 
 
@@ -51,7 +53,10 @@ class DummyResource(AbstractResource):
             raise errors.InvalidResourceType("file resource expected")
         self._content.seek(offset)
         buffer = self._content.read(limit)
-        await write(buffer)
+        if asyncio.iscoroutinefunction(write):
+            await write(buffer)
+        else:
+            write(buffer)
 
     def with_relative(self, relative) -> 'AbstractResource':
         if relative == '/':
@@ -90,18 +95,22 @@ class DummyResource(AbstractResource):
 
     async def put_content(self, read_some: typing.Awaitable[bytes]) -> bool:
         if self._exists:
+            created = False
             if self.is_collection:
                 raise errors.InvalidResourceType("file resource expected")
         else:
+            created = True
             self._touch_file()
 
         self._content.seek(0)
         self._content.truncate()
+        if not read_some:
+            return created
         while True:
             buffer = await read_some()
             self._content.write(buffer)
             if not buffer:
-                return
+                return created
 
     def propfind(self, *props) -> OrderedDict:
         fmt = '%Y-%m-%dT%H:%M:%SZ'
@@ -141,11 +150,15 @@ class DummyResource(AbstractResource):
 
     # noinspection PyProtectedMember
     async def move(self, destination: str) -> bool:
-        del self._parent._resources[self.name]
+        old_name = self.name
         dest_resource = self._root.with_relative(destination)
         if not dest_resource._exists:
             self._path = dest_resource.path
             dest_resource = dest_resource._parent
+        await dest_resource.populate_props()
+        if not dest_resource.is_collection:
+            raise errors.InvalidResourceType("collection expected")
+        del self._parent._resources[old_name]
         self._parent = dest_resource
         self._path = os.path.join(self._parent.path, self.name)
         dest_resource._resources[self.name] = self

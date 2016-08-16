@@ -11,6 +11,10 @@ __all__ = ['DummyBackendTestCase']
 class DummyBackendTestCase(BackendTestsMixin, TestCase):
     Resource = DummyResource
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.Resource._root = None
+
     def testSecondRootDeny(self):
         with self.assertRaises(ValueError):
             self.create_resource('prefix')

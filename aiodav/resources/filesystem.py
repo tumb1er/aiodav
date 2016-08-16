@@ -164,11 +164,13 @@ class FileSystemResource(AbstractResource):
             raise errors.ResourceDoesNotExist("parent resource does not exist")
         try:
             with self.absolute.open(mode) as f:
+                if not read_some:
+                    return created
                 while True:
                     buffer = await read_some()
                     f.write(buffer)
                     if not buffer:
-                        return
+                        return created
         except NotADirectoryError:
             raise errors.InvalidResourceType(
                 "parent resource is not a collection")

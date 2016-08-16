@@ -2,3 +2,4 @@
 
 from .test_dummy_backend import *
 from .test_filesystem_backend import *
+from .test_webdav import *

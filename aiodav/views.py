@@ -5,7 +5,7 @@ import typing
 from urllib.parse import urlparse, unquote
 
 from aiohttp.streams import EmptyStreamReader
-from lxml import etree as ET
+from lxml import etree as et
 
 import aiohttp_jinja2
 from aiohttp import web
@@ -16,15 +16,15 @@ from io import BytesIO
 from aiodav import resources, conf
 from aiodav.resources import errors
 
-DAV_METHODS = ["COPY", "MOVE", "MKCOL", "PROPFIND"]
+DAV_METHODS = {"COPY", "MOVE", "MKCOL", "PROPFIND"}
 
 
 @aiohttp_jinja2.template('root.jinja2')
 async def root_view(request):
     aiodav_conf = request.app[conf.APP_KEY]
     mounts = aiodav_conf['mounts']
-    resources = sorted(mounts.keys())
-    return {'_resources': resources}
+    prefixes = sorted(mounts.keys())
+    return {'resources': prefixes}
 
 
 class ResourceView(web.View):
@@ -41,13 +41,19 @@ class ResourceView(web.View):
 
     @asyncio.coroutine
     def __iter__(self):
-        if self.request.method not in DAV_METHODS:
+        if self.request.method not in hdrs.METH_ALL | DAV_METHODS:
             self._raise_allowed_methods()
         method = getattr(self, self.request.method.lower(), None)
         if method is None:
             self._raise_allowed_methods()
         resp = yield from method()
         return resp
+
+    def _raise_allowed_methods(self):
+        allowed_methods = {
+            m for m in hdrs.METH_ALL | DAV_METHODS if hasattr(self, m.lower())}
+        raise web.HTTPMethodNotAllowed(self.request.method,
+                                       sorted(allowed_methods))
 
     @classmethod
     def with_resource(cls, resource: resources.AbstractResource,
@@ -63,7 +69,7 @@ class ResourceView(web.View):
 
     @property
     def relative(self):
-        return self.request.match_info['relative'].lstrip('/')
+        return self.request.match_info['relative'].lstrip('/') or '/'
 
     @property
     def depth(self):
@@ -80,9 +86,9 @@ class ResourceView(web.View):
 
     @property
     def range(self) -> typing.Tuple[int, int]:
-        range = self.request.headers.get('Range')
-        if range and range.startswith('bytes=') and '-' in range:
-            start, end = range[6:].split('-')
+        byte_range = self.request.headers.get('Range')
+        if byte_range and byte_range.startswith('bytes=') and '-' in byte_range:
+            start, end = byte_range[6:].split('-')
             start = int(start)
             if end:
                 end = int(end)
@@ -93,7 +99,10 @@ class ResourceView(web.View):
         return start, end
 
     async def mkcol(self):
-        current, resource = await self._instantiate_parent()
+        try:
+            current, resource = await self._instantiate_parent()
+        except errors.ResourceDoesNotExist:
+            raise web.HTTPNotFound(text="Parent does not exist")
         if not resource.is_collection:
             raise web.HTTPBadRequest(text="Collection expected")
         await resource.make_collection(current)
@@ -106,7 +115,14 @@ class ResourceView(web.View):
 
     async def move(self):
         resource = await self._instantiate_resource(self.relative)
-        created = await resource.move(self.destination)
+        try:
+            created = await resource.move(self.destination)
+        except errors.InvalidResourceType:
+            # destination exists and is not a collection
+            old = await self._instantiate_resource(self.destination)
+            await old.delete()
+            await resource.move(self.destination)
+            created = False
         if created:
             return web.HTTPCreated()
         else:
@@ -114,8 +130,16 @@ class ResourceView(web.View):
 
     async def copy(self):
         resource = await self._instantiate_resource(self.relative)
-        await resource.copy(self.destination)
-        return web.HTTPCreated()
+        try:
+            await resource.copy(self.destination)
+            created = True
+        except errors.ResourceAlreadyExists:
+            old = await self._instantiate_resource(self.destination)
+            await old.delete()
+            await resource.copy(self.destination)
+            created = False
+
+        return web.HTTPCreated() if created else web.HTTPNoContent()
 
     async def head(self):
         try:
@@ -176,17 +200,15 @@ class ResourceView(web.View):
                 start, start + length-1, start + length)
         response.content_length = length
         await response.prepare(self.request)
-        try:
-            # noinspection PyTypeChecker
-            await resource.get_content(response.write, offset=start,
-                                       limit=length)
-            await response.write_eof()
-            response.set_tcp_nodelay(True)
-        except asyncio.CancelledError:
-            pass
+        # noinspection PyTypeChecker
+        await resource.get_content(response.write, offset=start,
+                                   limit=length)
+        await response.write_eof()
+        response.set_tcp_nodelay(True)
         return response
 
-    async def options(self):
+    @staticmethod
+    async def options():
         response = web.Response(text="", content_type='text/xml')
         response.headers['Allow'] = ', '.join(DAV_METHODS)
         response.headers['DAV'] = '1, 2'
@@ -201,8 +223,9 @@ class ResourceView(web.View):
             if 'gvfs' in self.request.headers.get('User-Agent', ''):
                 raise web.HTTPNotFound()
             http_resp = web.HTTPNotFound()
-            empty_propstat = ET.Element('{DAV:}propstat', nsmap={'D': 'DAV:'})
-            prop = ET.SubElement(empty_propstat, '{DAV:}prop', nsmap={'D': 'DAV:'})
+            empty_propstat = et.Element('{DAV:}propstat', nsmap={'D': 'DAV:'})
+            prop = et.SubElement(empty_propstat, '{DAV:}prop',
+                                 nsmap={'D': 'DAV:'})
             prop.text = ''
             resp = DavXMLResponse(self.request.path,
                                   status=http_resp.status_code,
@@ -226,28 +249,32 @@ class ResourceView(web.View):
         return MultiStatusResponse(response, *collection)
 
     async def _instantiate_resource(self, relative):
+        if relative == '':
+            return self.resource
         resource = self.resource / relative
         await resource.populate_props()
         if resource.is_collection:
             await resource.populate_collection()
         return resource
 
-    def propstat_xml(self, resource: resources.AbstractResource, *props) -> ET.Element:
-        ps = ET.Element('{DAV:}propstat', nsmap={'D': 'DAV:'})
-        prop = ET.SubElement(ps, '{DAV:}prop', nsmap={'D': 'DAV:'})
+    @staticmethod
+    def propstat_xml(
+            resource: resources.AbstractResource, *props) -> et.Element:
+        ps = et.Element('{DAV:}propstat', nsmap={'D': 'DAV:'})
+        prop = et.SubElement(ps, '{DAV:}prop', nsmap={'D': 'DAV:'})
         for k, v in resource.propfind(*props).items():
-            el = ET.SubElement(prop, '{DAV:}%s' % k, nsmap={'D': 'DAV:'})
+            el = et.SubElement(prop, '{DAV:}%s' % k, nsmap={'D': 'DAV:'})
             el.text = str(v)
 
-        rt = ET.SubElement(prop, '{DAV:}resourcetype', nsmap={'D': 'DAV:'})
+        rt = et.SubElement(prop, '{DAV:}resourcetype', nsmap={'D': 'DAV:'})
         if resource.is_collection:
-            col = ET.SubElement(rt, '{DAV:}collection', nsmap={'D': 'DAV:'})
+            col = et.SubElement(rt, '{DAV:}collection', nsmap={'D': 'DAV:'})
             col.text = ''
         return ps
 
     @staticmethod
     def parse_propfind(text) -> typing.List[str]:
-        xml = ET.fromstring(text)
+        xml = et.fromstring(text)
         props = []
         prop_elems = xml.xpath('D:prop/*', namespaces={'D': 'DAV:'})
         for elem in prop_elems:
@@ -261,7 +288,7 @@ class DavResourceRoute(ResourceRoute):
 
 class DavXMLResponse:
     def __init__(self, href, *, status=200, reason="OK", propstat=None):
-        self.status = ET.Element('{DAV:}status', nsmap={'D': 'DAV:'})
+        self.status = et.Element('{DAV:}status', nsmap={'D': 'DAV:'})
         self.status.text = 'HTTP/1.1 %s %s' % (status, reason)
         self.propstat = propstat
         if self.propstat is not None:
@@ -280,20 +307,17 @@ class MultiStatusResponse(web.Response):
     def dump_xml(xml):
         f = BytesIO()
         f.write(b'<?xml version="1.0" encoding="utf-8" ?>\n')
-        ET.ElementTree(xml).write(f, pretty_print=True)
+        et.ElementTree(xml).write(f, pretty_print=True)
         body = f.getvalue()
         return body
 
     @staticmethod
     def construct_multistatus_xml(
-            responses: typing.Iterable[DavXMLResponse]) -> ET.Element:
-        ms = ET.Element('{DAV:}multistatus', nsmap={'D': 'DAV:'})
+            responses: typing.Iterable[DavXMLResponse]) -> et.Element:
+        ms = et.Element('{DAV:}multistatus', nsmap={'D': 'DAV:'})
         for xml_response in responses:
-            response = ET.SubElement(ms, '{DAV:}response', nsmap={'D': 'DAV:'})
-            href = ET.SubElement(response, '{DAV:}href', nsmap={'D': 'DAV:'})
+            response = et.SubElement(ms, '{DAV:}response', nsmap={'D': 'DAV:'})
+            href = et.SubElement(response, '{DAV:}href', nsmap={'D': 'DAV:'})
             href.text = xml_response.href
-            if xml_response.propstat is not None:
-                response.append(xml_response.propstat)
-            else:
-                response.append(xml_response.status)
+            response.append(xml_response.propstat)
         return ms
