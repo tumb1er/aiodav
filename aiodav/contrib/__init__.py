@@ -17,8 +17,8 @@ def setup(app: web.Application, *, prefix:str ='/', hack_debugtoolbar: bool=True
     loader = jinja2.PackageLoader('aiodav')
     aiohttp_jinja2.setup(app, loader=loader, extensions=['jinja2.ext.with_'])
 
-    if hack_debugtoolbar:
-        setup_aiodav_panels(app)
+    if hack_debugtoolbar:  # pragma: no cover
+        setup_aiodav_panels(app)  # pragma: no cover
 
     app.router.add_route('GET', prefix, views.root_view)
 
