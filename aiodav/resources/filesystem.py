@@ -84,6 +84,7 @@ class FileSystemResource(AbstractResource):
         try:
             for child in self.absolute.iterdir():
                 relative = self.with_relative(child.relative_to(self.absolute))
+                relative._stat = os.stat(str(relative.absolute))
                 if child.is_dir():
                     collections.append(relative)
                 else:

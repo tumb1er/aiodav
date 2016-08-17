@@ -170,6 +170,16 @@ class BackendTestsMixin(object):
             ('getlastmodified', format_time(file_resource.mtime))
         ]))
 
+    async def testPopulateCollection(self):
+        file_resource = self.root / 'filename.txt'
+        await fill_file(file_resource)
+        dir_resource = await self.root.make_collection('dir')
+        await file_resource.populate_props()
+        await dir_resource.populate_props()
+        await self.root.populate_collection()
+        self.assertListEqual(self.root.collection,
+                             [dir_resource, file_resource])
+
     async def testReadLarge(self):
         file_resource = self.root / 'filename.txt'
         expected = b'A' * 2 * 1024**2
