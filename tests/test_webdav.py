@@ -100,6 +100,32 @@ class WebDAVTestCase(BaseTestCase):
             'is_collection': False
         })
 
+    async def testGetDirJSON(self):
+        d = await self.root.make_collection('dir')
+        f = d / 'filename.txt'
+        await fill_file(f)
+        await d.populate_collection()
+        await d.populate_props()
+        await f.populate_props()
+
+        response = await self.client.get('/prefix/dir',
+                                         headers={'Accept': 'application/json'})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.headers['Content-Type'],
+                         'application/json; charset=utf-8')
+        data = json.loads(response.text)
+        self.assertDictEqual(data['resource'], {
+            'name': d.name,
+            'path': d.path,
+            'size': d.size,
+            'is_collection': True
+        })
+        self.assertListEqual(data['descendants'], [{
+            'name': f.name,
+            'path': f.path,
+            'size': f.size,
+            'is_collection': False
+        }])
 
     async def testDownloadFileHTML(self):
         f = self.root / 'filename.txt'
