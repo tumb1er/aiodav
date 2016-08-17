@@ -103,6 +103,7 @@ class ResourceView(web.View):
             current, resource = await self._instantiate_parent()
         except errors.ResourceDoesNotExist:
             raise web.HTTPNotFound(text="Parent does not exist")
+        await resource.populate_props()
         if not resource.is_collection:
             raise web.HTTPBadRequest(text="Collection expected")
         await resource.make_collection(current)
