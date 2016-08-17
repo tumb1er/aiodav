@@ -157,17 +157,39 @@ class ResourceView(web.View):
         except errors.ResourceDoesNotExist:
             return web.HTTPNotFound()
 
+    @staticmethod
+    def dump_resource(resource):
+        return {
+            'name': resource.name,
+            'path': resource.path,
+            'is_collection': resource.is_collection,
+            'size': resource.size
+        }
+
     async def get(self):
         accept = self.request.headers.get('Accept', '')
         resource = await self._instantiate_resource(self.relative)
-        if 'text/html' in accept and not self.request.GET.get('dl'):
-            context = {'resource': resource, 'relative': self.relative}
-            return aiohttp_jinja2.render_template(
-                'resource.jinja2', self.request, context)
+        if 'application/json' in accept:
+            return self.render_json(resource)
+        elif 'text/html' not in accept or self.request.GET.get('dl'):
+            if resource.is_collection:
+                raise web.HTTPBadRequest(text="Can't download collection")
+            start, end = self.range
+            return await self.stream_resource(resource, start=start, end=end)
+        else:
+            return self.render_html(resource)
+
+    def render_json(self, resource):
+        data = {'resource': self.dump_resource(resource)}
         if resource.is_collection:
-            raise web.HTTPBadRequest(text="Can't download collection")
-        start, end = self.range
-        return await self.stream_resource(resource, start=start, end=end)
+            data['descendants'] = [self.dump_resource(r)
+                                   for r in resource.collection]
+        return web.json_response(data)
+
+    def render_html(self, resource):
+        context = {'resource': resource, 'relative': self.relative}
+        return aiohttp_jinja2.render_template(
+            'resource.jinja2', self.request, context)
 
     async def put(self):
         editable_resource = self.resource / self.relative
